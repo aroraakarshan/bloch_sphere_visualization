@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Bloch Sphere</title>
+    <!-- Load Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .input-group {
+            margin: 15px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-group label {
+            font-weight: bold;
+            color: #555;
+            min-width: 80px;
+        }
+        .input-group input {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 120px;
+            transition: border-color 0.3s;
+        }
+        .input-group input:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #plot {
+            width: 100%;
+            height: 600px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        @media (max-width: 600px) {
+            .input-group {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .input-group input {
+                width: 100%;
+            }
+            #plot {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Bloch Sphere</h1>
+        <div class="input-group">
+            <label title="Real part of α (state coefficient for |0⟩)">Re(α):</label><input type="number" id="alpha-real" value="1.0" step="0.1">
+            <label title="Imaginary part of α (state coefficient for |0⟩)">Im(α):</label><input type="number" id="alpha-imag" value="0.0" step="0.1">
+        </div>
+        <div class="input-group">
+            <label title="Real part of β (state coefficient for |1⟩)">Re(β):</label><input type="number" id="beta-real" value="0.0" step="0.1">
+            <label title="Imaginary part of β (state coefficient for |1⟩)">Im(β):</label><input type="number" id="beta-imag" value="0.0" step="0.1">
+        </div>
+        <button onclick="updatePlot()">Update Plot</button>
+        <div id="plot"></div>
+    </div>
+
+    <script>
+        // Function to compute Bloch sphere coordinates and additional parameters
+        function stateToBloch(alpha, beta) {
+            const norm = Math.sqrt(
+                alpha.real * alpha.real + alpha.imag * alpha.imag +
+                beta.real * beta.real + beta.imag * beta.imag
+            ) || 1; // Avoid division by zero
+            alpha.real /= norm;
+            alpha.imag /= norm;
+            beta.real /= norm;
+            beta.imag /= norm;
+
+            const x = 2 * (alpha.real * beta.real + alpha.imag * beta.imag);
+            const y = 2 * (alpha.real * beta.imag - alpha.imag * beta.real);
+            const z = alpha.real * alpha.real + alpha.imag * alpha.imag -
+                      beta.real * beta.real - beta.imag * beta.imag;
+
+            const theta = 2 * Math.acos(Math.sqrt(alpha.real * alpha.real + alpha.imag * alpha.imag));
+            const phi = Math.atan2(beta.imag, beta.real);
+            const amplitudeAlpha = Math.sqrt(alpha.real * alpha.real + alpha.imag * alpha.imag).toFixed(2);
+            const amplitudeBeta = Math.sqrt(beta.real * beta.real + beta.imag * beta.imag).toFixed(2);
+
+            return { x, y, z, theta, phi, alpha, beta, amplitudeAlpha, amplitudeBeta };
+        }
+
+        // Function to generate sphere surface data
+        function generateSphere() {
+            const theta = [];
+            const phi = [];
+            const x = [];
+            const y = [];
+            const z = [];
+
+            for (let t = 0; t <= 2 * Math.PI; t += Math.PI / 25) {
+                for (let p = 0; p <= Math.PI; p += Math.PI / 25) {
+                    theta.push(t);
+                    phi.push(p);
+                    x.push(Math.sin(p) * Math.cos(t));
+                    y.push(Math.sin(p) * Math.sin(t));
+                    z.push(Math.cos(p));
+                }
+            }
+
+            return { x, y, z };
+        }
+
+        // Function to generate equator and meridians
+        function generateGridLines() {
+            const theta = [];
+            const phi = [];
+            for (let t = 0; t <= 2 * Math.PI; t += Math.PI / 50) {
+                theta.push(t);
+            }
+            for (let p = 0; p <= Math.PI; p += Math.PI / 50) {
+                phi.push(p);
+            }
+
+            const equatorX = theta.map(t => Math.cos(t));
+            const equatorY = theta.map(t => Math.sin(t));
+            const equatorZ = theta.map(t => 0);
+
+            const meridian1X = phi.map(p => Math.sin(p));
+            const meridian1Y = phi.map(p => 0);
+            const meridian1Z = phi.map(p => Math.cos(p));
+
+            const meridian2X = phi.map(p => 0);
+            const meridian2Y = phi.map(p => Math.sin(p));
+            const meridian2Z = phi.map(p => Math.cos(p));
+
+            return { equatorX, equatorY, equatorZ, meridian1X, meridian1Y, meridian1Z, meridian2X, meridian2Y, meridian2Z };
+        }
+
+        // Function to interpolate between two points
+        function interpolatePath(start, end, steps) {
+            const frames = [];
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const x = start.x + t * (end.x - start.x);
+                const y = start.y + t * (end.y - start.y);
+                const z = start.z + t * (end.z - start.z);
+                frames.push({ x, y, z });
+            }
+            return frames;
+        }
+
+        // Initial plot
+        const sphereData = generateSphere();
+        const gridLines = generateGridLines();
+        let currentState = stateToBloch(
+            { real: parseFloat(document.getElementById('alpha-real').value), imag: parseFloat(document.getElementById('alpha-imag').value) },
+            { real: parseFloat(document.getElementById('beta-real').value), imag: parseFloat(document.getElementById('beta-imag').value) }
+        );
+
+        const data = [
+            // Sphere surface
+            {
+                type: 'surface',
+                x: sphereData.x,
+                y: sphereData.y,
+                z: sphereData.z,
+                opacity: 0.15,
+                colorscale: 'Blues',
+                showscale: false
+            },
+            // X-axis
+            {
+                type: 'scatter3d',
+                x: [-1, 1],
+                y: [0, 0],
+                z: [0, 0],
+                mode: 'lines',
+                line: { color: '#333', width: 2 },
+                name: 'X-axis',
+                hoverinfo: 'text',
+                text: ['X-axis', 'X-axis']
+            },
+            // Y-axis
+            {
+                type: 'scatter3d',
+                x: [0, 0],
+                y: [-1, 1],
+                z: [0, 0],
+                mode: 'lines',
+                line: { color: '#333', width: 2 },
+                name: 'Y-axis',
+                hoverinfo: 'text',
+                text: ['Y-axis', 'Y-axis']
+            },
+            // Z-axis
+            {
+                type: 'scatter3d',
+                x: [0, 0],
+                y: [0, 0],
+                z: [-1, 1],
+                mode: 'lines',
+                line: { color: '#333', width: 2 },
+                name: 'Z-axis',
+                hoverinfo: 'text',
+                text: ['Z-axis', 'Z-axis']
+            },
+            // Equator
+            {
+                type: 'scatter3d',
+                x: gridLines.equatorX,
+                y: gridLines.equatorY,
+                z: gridLines.equatorZ,
+                mode: 'lines',
+                line: { color: '#666', width: 2, dash: 'dash' },
+                name: 'Equator',
+                hoverinfo: 'text',
+                text: gridLines.equatorX.map(() => 'Equator')
+            },
+            // Meridian 1
+            {
+                type: 'scatter3d',
+                x: gridLines.meridian1X,
+                y: gridLines.meridian1Y,
+                z: gridLines.meridian1Z,
+                mode: 'lines',
+                line: { color: '#666', width: 2, dash: 'dash' },
+                name: 'Meridian',
+                hoverinfo: 'text',
+                text: gridLines.meridian1X.map(() => 'Meridian')
+            },
+            // Meridian 2
+            {
+                type: 'scatter3d',
+                x: gridLines.meridian2X,
+                y: gridLines.meridian2Y,
+                z: gridLines.meridian2Z,
+                mode: 'lines',
+                line: { color: '#666', width: 2, dash: 'dash' },
+                name: 'Meridian',
+                hoverinfo: 'text',
+                text: gridLines.meridian2X.map(() => 'Meridian')
+            },
+            // State vector (increased stroke width)
+            {
+                type: 'scatter3d',
+                x: [0, currentState.x],
+                y: [0, currentState.y],
+                z: [0, currentState.z],
+                mode: 'lines',
+                line: { color: '#ff0000', width: 10 }, // Increased from 5 to 10
+                name: 'State Vector',
+                hoverinfo: 'text',
+                text: ['Origin', 'State Vector']
+            },
+            // Reference states
+            {
+                type: 'scatter3d',
+                x: [0], y: [0], z: [1],
+                mode: 'markers',
+                marker: { size: 10, color: '#28a745' },
+                name: '|0⟩',
+                hoverinfo: 'text',
+                text: ['|0⟩']
+            },
+            {
+                type: 'scatter3d',
+                x: [0], y: [0], z: [-1],
+                mode: 'markers',
+                marker: { size: 10, color: '#28a745' },
+                name: '|1⟩',
+                hoverinfo: 'text',
+                text: ['|1⟩']
+            },
+            {
+                type: 'scatter3d',
+                x: [1], y: [0], z: [0],
+                mode: 'markers',
+                marker: { size: 10, color: '#ffc107' },
+                name: '|+⟩',
+                hoverinfo: 'text',
+                text: ['|+⟩']
+            },
+            {
+                type: 'scatter3d',
+                x: [-1], y: [0], z: [0],
+                mode: 'markers',
+                marker: { size: 10, color: '#ffc107' },
+                name: '|-⟩',
+                hoverinfo: 'text',
+                text: ['|-⟩']
+            },
+            {
+                type: 'scatter3d',
+                x: [0], y: [1], z: [0],
+                mode: 'markers',
+                marker: { size: 10, color: '#17a2b8' },
+                name: '|+i⟩',
+                hoverinfo: 'text',
+                text: ['|+i⟩']
+            },
+            {
+                type: 'scatter3d',
+                x: [0], y: [-1], z: [0],
+                mode: 'markers',
+                marker: { size: 10, color: '#17a2b8' },
+                name: '|-i⟩',
+                hoverinfo: 'text',
+                text: ['|-i⟩']
+            }
+        ];
+
+        const layout = {
+            scene: {
+                xaxis: { title: 'X', titlefont: { color: '#333' } },
+                yaxis: { title: 'Y', titlefont: { color: '#333' } },
+                zaxis: { title: 'Z', titlefont: { color: '#333' } },
+                aspectratio: { x: 1, y: 1, z: 1 },
+                camera: { eye: { x: 1.5, y: 1.5, z: 1.5 } }
+            },
+            title: {
+                text: 'Bloch Sphere',
+                font: { size: 24, color: '#333' }
+            },
+            showlegend: true,
+            margin: { l: 0, r: 0, t: 50, b: 0 },
+            paper_bgcolor: 'white',
+            plot_bgcolor: 'white',
+            annotations: [
+                {
+                    x: 0.05,
+                    y: 0.95,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: `θ: ${currentState.theta.toFixed(2)} rad`,
+                    showarrow: false,
+                    font: { size: 14, color: '#333' }
+                },
+                {
+                    x: 0.05,
+                    y: 0.90,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: `φ: ${currentState.phi.toFixed(2)} rad`,
+                    showarrow: false,
+                    font: { size: 14, color: '#333' }
+                },
+                {
+                    x: 0.05,
+                    y: 0.85,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: `|α|: ${currentState.amplitudeAlpha}`,
+                    showarrow: false,
+                    font: { size: 14, color: '#333' }
+                },
+                {
+                    x: 0.05,
+                    y: 0.80,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: `|β|: ${currentState.amplitudeBeta}`,
+                    showarrow: false,
+                    font: { size: 14, color: '#333' }
+                }
+            ]
+        };
+
+        Plotly.newPlot('plot', data, layout);
+
+        // Function to update the plot with smooth animation
+        function updatePlot(event) {
+            const alpha = {
+                real: parseFloat(document.getElementById('alpha-real').value) || 0,
+                imag: parseFloat(document.getElementById('alpha-imag').value) || 0
+            };
+            const beta = {
+                real: parseFloat(document.getElementById('beta-real').value) || 0,
+                imag: parseFloat(document.getElementById('beta-imag').value) || 0
+            };
+
+            const newState = stateToBloch(alpha, beta);
+            const start = { x: currentState.x, y: currentState.y, z: currentState.z };
+            const end = { x: newState.x, y: newState.y, z: newState.z };
+
+            // Generate interpolation frames (e.g., 20 steps for smooth transition)
+            const steps = 20;
+            const frames = interpolatePath(start, end, steps).map((point, index) => ({
+                data: [{
+                    x: [0, point.x],
+                    y: [0, point.y],
+                    z: [0, point.z]
+                }],
+                layout: {
+                    annotations: [
+                        { x: 0.05, y: 0.95, xref: 'paper', yref: 'paper', text: `θ: ${newState.theta.toFixed(2)} rad`, showarrow: false, font: { size: 14, color: '#333' } },
+                        { x: 0.05, y: 0.90, xref: 'paper', yref: 'paper', text: `φ: ${newState.phi.toFixed(2)} rad`, showarrow: false, font: { size: 14, color: '#333' } },
+                        { x: 0.05, y: 0.85, xref: 'paper', yref: 'paper', text: `|α|: ${newState.amplitudeAlpha}`, showarrow: false, font: { size: 14, color: '#333' } },
+                        { x: 0.05, y: 0.80, xref: 'paper', yref: 'paper', text: `|β|: ${newState.amplitudeBeta}`, showarrow: false, font: { size: 14, color: '#333' } }
+                    ]
+                },
+                traces: [7] // Index 7 corresponds to the state vector trace
+            }));
+
+            // Perform smooth animation
+            Plotly.animate('plot', frames, {
+                transition: {
+                    duration: 1000, // 1000ms total duration for smooth transition
+                    easing: 'cubic-in-out'
+                },
+                frame: {
+                    duration: 1000 / steps, // Duration per frame
+                    redraw: true
+                },
+                mode: 'immediate'
+            }).then(() => {
+                Plotly.redraw('plot');
+                currentState = newState; // Update current state after animation
+            });
+        }
+
+        // Add real-time updates with debouncing
+        let timeout;
+        function debounceUpdate(event) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => updatePlot(event), 100); // 100ms debounce
+        }
+
+        document.getElementById('alpha-real').addEventListener('input', debounceUpdate);
+        document.getElementById('alpha-imag').addEventListener('input', debounceUpdate);
+        document.getElementById('beta-real').addEventListener('input', debounceUpdate);
+        document.getElementById('beta-imag').addEventListener('input', debounceUpdate);
+    </script>
+</body>
+</html>
